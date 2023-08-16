@@ -40,6 +40,8 @@ class LPTrainer(BaseTrainer):
     def processBeforeTraining(self, task_id, curr_dataset, curr_model, curr_optimizer, curr_training_states):
         curr_training_states['scheduler'] = self.scheduler_fn(curr_optimizer)
         curr_training_states['best_val_score'] = -1.
+        curr_training_states['best_weights'] = copy.deepcopy(curr_model.state_dict())
+        
         curr_model.observe_labels(torch.LongTensor([0]))
         self._reset_optimizer(curr_optimizer)
     
@@ -149,7 +151,8 @@ class LCTrainer(BaseTrainer):
         else:
             curr_model.observe_labels(curr_dataset.edata['label'][curr_dataset.edata['train_mask'] | curr_dataset.edata['val_mask']])
         self._reset_optimizer(curr_optimizer)
-    
+        curr_training_states['best_weights'] = copy.deepcopy(curr_model.state_dict())
+        
     def predictionFormat(self, results):
         if self.binary:
             return results['preds']

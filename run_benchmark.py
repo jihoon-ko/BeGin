@@ -210,19 +210,20 @@ if __name__ == '__main__':
                                                      loss_fn = torch.nn.CrossEntropyLoss(ignore_index=-1) if metric == 'accuracy' else (lambda preds, gt: torch.nn.BCEWithLogitsLoss()(preds, gt.float())),
                                                      device = torch.device(f'cuda:{args.gpu}'),
                                                      scheduler_fn = lambda x: torch.optim.lr_scheduler.ReduceLROnPlateau(x, mode='max' if args.dataset_name in ['wikics', 'ogbl-collab'] else 'min', patience=patience, min_lr= lr * min_scale * 2., verbose=False),
-                                                     benchmark = True, seed = seed, verbose=True, binary = (metric != 'accuracy'), **algo_kwargs)
+                                                     benchmark = True, seed = seed, verbose=True, binary = (metric != 'accuracy'), full_mode=True, **algo_kwargs)
 
                                 benchmark.run(epoch_per_task = max_num_epochs)
 
                                 shutil.copy(f'{benchmark.result_path}/{benchmark.save_file_name}.pkl', f'{log_path}/result_{lr}_{dr}_{wd}_{str(special_param)}_{seed}.pkl')
                             with open(pickle_path, 'rb') as f:    
                                 result = pickle.load(f)
-                                total_val_ap.append(result['exp_val'][-1][:-1].sum() / result['exp_val'].shape[0])
-                                total_test_ap.append(result['exp_test'][-1][:-1].sum() / result['exp_test'].shape[0])
-                                total_val_af.append((result['exp_val'][np.arange(result['exp_val'].shape[0]), np.arange(result['exp_val'].shape[0])] - result['exp_val'][-1, :-1]).sum() / (result['exp_val'].shape[0] - 1))
-                                total_test_af.append((result['exp_test'][np.arange(result['exp_test'].shape[0]), np.arange(result['exp_test'].shape[0])] - result['exp_test'][-1, :-1]).sum() / (result['exp_test'].shape[0] - 1))
+                                total_val_ap.append(result['accum_val'][-1][:-1].sum() / result['accum_val'].shape[0])
+                                total_test_ap.append(result['accum_test'][-1][:-1].sum() / result['accum_test'].shape[0])
+                                total_val_af.append((result['accum_val'][np.arange(result['accum_val'].shape[0]), np.arange(result['accum_val'].shape[0])] - result['accum_val'][-1, :-1]).sum() / (result['accum_val'].shape[0] - 1))
+                                total_test_af.append((result['accum_test'][np.arange(result['accum_test'].shape[0]), np.arange(result['accum_test'].shape[0])] - result['accum_test'][-1, :-1]).sum() / (result['accum_test'].shape[0] - 1))
                         with open(f'{log_path}/_result.log', 'a') as f_log:
                             f_log.write(f'{args.dataset_name}_{args.algo}_{args.incr}_lr={lr}_dropout={dr}_weightdecay={wd}_{special_param_name}={str(special_param)} val_AP: {np.round(np.mean(total_val_ap), 4)}±{np.round(np.std(total_val_ap, ddof=1), 4)} test_AP: {np.round(np.mean(total_test_ap), 4)}±{np.round(np.std(total_test_ap, ddof=1), 4)} val_AF: {np.round(np.mean(total_val_af), 4)}±{np.round(np.std(total_val_af, ddof=1), 4)} test_AF: {np.round(np.mean(total_test_af), 4)}±{np.round(np.std(total_test_af, ddof=1), 4)}\n')
                             f_log.flush()
                     except:
+                        print(ee)
                         pass

@@ -29,6 +29,7 @@ class NCTrainer(BaseTrainer):
         # initialize scheduler, optimizer, and best_val_loss
         curr_training_states['scheduler'] = self.scheduler_fn(curr_optimizer)
         curr_training_states['best_val_loss'] = 1e10
+        
         self._reset_optimizer(curr_optimizer)
         
         if self.binary:
@@ -37,7 +38,8 @@ class NCTrainer(BaseTrainer):
         else:
             # it enables to predict the new classes from the current task
             curr_model.observe_labels(curr_dataset.ndata['label'][curr_dataset.ndata['train_mask'] | curr_dataset.ndata['val_mask']])    
-    
+        curr_training_states['best_weights'] = copy.deepcopy(curr_model.state_dict())
+        
     def predictionFormat(self, results):
         if self.binary:
             return results['preds']
@@ -98,6 +100,7 @@ class NCTrainer(BaseTrainer):
         
         # dump the results as pickle
         with open(f'{self.result_path}/{self.save_file_name}.pkl', 'wb') as f:
+            # print([k for k, v in results.items() if 'val' in k or 'test' in k])
             pickle.dump({k: v.detach().cpu().numpy() for k, v in results.items() if 'val' in k or 'test' in k}, f)
         if self.full_mode:
             init_acc, accum_acc_mat, base_acc_mat, algo_acc_mat = map(lambda x: results[x].detach().cpu().numpy(), ('init_test', 'accum_test', 'base_test', 'exp_test'))
@@ -106,7 +109,7 @@ class NCTrainer(BaseTrainer):
         
         if self.verbose:
             print('init_acc:', init_acc[:-1])
-            print('algo_acc_mat:', algo_acc_mat[:, :-1])
+            print('algo_acc_mat:', accum_acc_mat[:, :-1])
             print('AP:', round(results['exp_AP'], 4))
             print('AF:', round(results['exp_AF'], 4))
             if results['exp_FWT'] is not None: print('FWT:', round(results['exp_FWT'], 4))
