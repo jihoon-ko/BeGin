@@ -43,7 +43,7 @@ exp_settings = {('cora', 'task'): (3, 'accuracy', 1000, 20, 0.001),
                 ('aromaticity', 'class'): (10, 'accuracy', 100, 10, 0.01),
                 ('ogbg-molhiv', 'domain'): (20, 'rocauc', 100, 10, 0.01),
                 ('ogbg-ppa', 'domain'): (11, 'accuracy', 100, 10, 0.01),
-                ('nyctaxi', 'time'): (12, 'accuracy', 100, 10, 0.01)}
+                ('nyctaxi', 'time'): (16, 'accuracy', 100, 10, 0.01)}
 
 num_memories = {'cora': 12,
                 'citeseer': 12,
