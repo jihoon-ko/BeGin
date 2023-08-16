@@ -141,7 +141,7 @@ class NYCTaxiDataset(dgl.data.DGLBuiltinDataset):
             # print(node_feats.min(), node_feats.max(), node_feats.shape)
             node_feats = node_feats - 1
             
-        for yy in tqdm.trange(2021, 2021+1):
+        for yy in tqdm.trange(2018, 2021+1):
             for mm in range(1, 12+1):
                 for _dd in range(days[mm] + (1 if ((mm == 2) and (yy % 4 == 0)) else 0)):
                     dd = _dd + 1
@@ -153,7 +153,7 @@ class NYCTaxiDataset(dgl.data.DGLBuiltinDataset):
                         g.ndata['feat'] = F.one_hot(node_feats, num_classes=7).float()
                         g.edata['feat'] = edge_feats[valid_idxs, ii:ii+1].float()
                         graphs.append(g)
-                    
+                        
         self._graphs = graphs
         self.labels = torch.LongTensor(labels).unsqueeze(-1)
         # self._months = torch.LongTensor(times)
