@@ -84,6 +84,7 @@ class GCTrainer(BaseTrainer):
             curr_model.observe_labels(torch.LongTensor([0]))
         else:
             curr_model.observe_labels(torch.LongTensor([curr_dataset['train'][i][1] for i in range(len(curr_dataset['train']))] + [curr_dataset['val'][i][1] for i in range(len(curr_dataset['val']))]))
+        curr_training_states['best_weights'] = copy.deepcopy(curr_model.state_dict())
         
     def predictionFormat(self, results):
         if self.binary:

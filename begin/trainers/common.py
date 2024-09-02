@@ -236,6 +236,9 @@ class BaseTrainer:
                         self.__scenario.initial_test_result = initial_results['test']
                     
             # training loop for the current task
+            if self.full_mode:
+                stop_training['exp'] = True
+                stop_training['base'] = True
             for epoch_cnt in range(epoch_per_task):
                 for exp_name in ['exp', 'base', 'accum'] if self.full_mode else ['exp']:
                     if stop_training[exp_name]: continue

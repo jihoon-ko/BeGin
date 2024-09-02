@@ -70,7 +70,8 @@ class NCTrainer(BaseTrainer):
         else:
             # it enables to predict the new classes from the current task
             curr_model.observe_labels(curr_dataset.ndata['label'][curr_dataset.ndata['train_mask'] | curr_dataset.ndata['val_mask']])    
-    
+        curr_training_states['best_weights'] = copy.deepcopy(curr_model.state_dict())
+        
     def predictionFormat(self, results):
         if self.binary:
             return results['preds']

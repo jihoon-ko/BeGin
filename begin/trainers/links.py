@@ -75,6 +75,7 @@ class LPTrainer(BaseTrainer):
         curr_training_states['scheduler'] = self.scheduler_fn(curr_optimizer)
         curr_training_states['best_val_score'] = -1.
         curr_model.observe_labels(torch.LongTensor([0]))
+        curr_training_states['best_weights'] = copy.deepcopy(curr_model.state_dict())
         
     def predictionFormat(self, results):
         return results['preds']
@@ -207,6 +208,7 @@ class LCTrainer(BaseTrainer):
         return [(curr_dataset, srcs[train_mask], dsts[train_mask], labels[train_mask])], [(curr_dataset, srcs[val_mask], dsts[val_mask], labels[val_mask])], [(curr_dataset, srcs[test_mask], dsts[test_mask], labels[test_mask])]
     
     def processBeforeTraining(self, task_id, curr_dataset, curr_model, curr_optimizer, curr_training_states):
+        self._reset_optimizer(curr_optimizer)
         curr_training_states['scheduler'] = self.scheduler_fn(curr_optimizer)
         curr_training_states['best_val_acc'] = -1.
         curr_training_states['best_val_loss'] = 1e10
@@ -214,8 +216,8 @@ class LCTrainer(BaseTrainer):
             curr_model.observe_labels(torch.LongTensor([0]))
         else:
             curr_model.observe_labels(curr_dataset.edata['label'][curr_dataset.edata['train_mask'] | curr_dataset.edata['val_mask']])
-        self._reset_optimizer(curr_optimizer)
-    
+        curr_training_states['best_weights'] = copy.deepcopy(curr_model.state_dict())
+        
     def predictionFormat(self, results):
         if self.binary:
             return results['preds']
