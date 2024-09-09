@@ -9,6 +9,7 @@ from ogb.linkproppred import DglLinkPropPredDataset
 from .common import BaseScenarioLoader
 from .datasets import *
 from . import evaluator_map
+import time
 
 def load_linkp_dataset(dataset_name, dataset_load_func, incr_type, save_path):
     neg_edges = {}
@@ -169,9 +170,12 @@ class LPScenarioLoader(BaseScenarioLoader):
         Bases: ``BaseScenarioLoader``
     """
     def _init_continual_scenario(self):
+        _start_time = time.perf_counter()
         self.num_feats, self.__graph, self.__inner_tvt_splits, self.__neg_edges, self.__is_bipartite = load_linkp_dataset(self.dataset_name, self.dataset_load_func, self.incr_type, self.save_path)
         self.num_classes = 1
-        
+        print('load dataset:', time.perf_counter() - _start_time)
+
+        _start_time = time.perf_counter()
         if self.incr_type in ['class', 'task']:
             # It is impossible to make class-IL and task-IL setting
             raise NotImplementedError
@@ -200,6 +204,7 @@ class LPScenarioLoader(BaseScenarioLoader):
             else:
                 self.__evaluator = evaluator_map[self.metric](self.num_tasks, self.__task_ids)
         self.__test_results = []
+        print('init scenario:', time.perf_counter() - _start_time)
         
     def _update_target_dataset(self):
         # get sources and destinations
@@ -416,7 +421,11 @@ class LCScenarioLoader(BaseScenarioLoader):
         Bases: ``BaseScenarioLoader``
     """
     def _init_continual_scenario(self):
+        _start_time = time.perf_counter()
         self.num_classes, self.num_feats, self.__graph = load_linkc_dataset(self.dataset_name, self.dataset_load_func, self.incr_type, self.save_path)
+        print('load dataset:', time.perf_counter() - _start_time)
+        
+        _start_time = time.perf_counter()
         self.__domain_info = self.__graph.edata.get('domain', None)
         self.__time_splits = self.__graph.edata.get('time', None)
         
@@ -455,6 +464,7 @@ class LCScenarioLoader(BaseScenarioLoader):
         if self.metric is not None:
             self.__evaluator = evaluator_map[self.metric](self.num_tasks, self.__task_ids)
         self.__test_results = []
+        print('init scenario:', time.perf_counter() - _start_time)
         
     def _update_target_dataset(self):
         target_dataset = copy.deepcopy(self.__graph)

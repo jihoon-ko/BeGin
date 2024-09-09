@@ -8,6 +8,7 @@ from dgl.data.utils import download, Subset
 from .common import BaseScenarioLoader
 from .datasets import *
 from . import evaluator_map
+import time
 
 def load_graph_dataset(dataset_name, dataset_load_func, incr_type, save_path):
     domain_info, time_info = None, None

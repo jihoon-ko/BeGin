@@ -10,6 +10,7 @@ from torch_scatter import scatter
 from .common import BaseScenarioLoader
 from .datasets import *
 from . import evaluator_map
+import time
 
 def load_node_dataset(dataset_name, dataset_load_func, incr_type, save_path):
     """
@@ -219,7 +220,11 @@ class NCScenarioLoader(BaseScenarioLoader):
     """
     
     def _init_continual_scenario(self):
+        _start_time = time.perf_counter()
         self.num_classes, self.num_feats, self.__graph, self.__cover_rule = load_node_dataset(self.dataset_name, self.dataset_load_func, self.incr_type, self.save_path)
+        print('load dataset:', time.perf_counter() - _start_time)
+        
+        _start_time = time.perf_counter()
         if self.incr_type in ['class', 'task']:
             # determine task configuration
             if self.kwargs is not None and 'task_orders' in self.kwargs:
@@ -266,6 +271,7 @@ class NCScenarioLoader(BaseScenarioLoader):
         if self.metric is not None:
             self.__evaluator = evaluator_map[self.metric](self.num_tasks, self.__task_ids)
         self.__test_results = []
+        print('init scenario:', time.perf_counter() - _start_time)
         
     def _update_target_dataset(self):
         target_dataset = self.__graph.clone()

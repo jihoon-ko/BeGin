@@ -11,6 +11,7 @@ import shutil
 import tqdm
 from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
 from begin.utils.pretraining import *
+import time
 
 task_level = {'NC': 'nodes', 'LC': 'links', 'LP': 'links', 'GC': 'graphs'}
 model_suffix = {'NC': 'Node', 'LC': 'Link', 'LP': 'Link', 'GC': 'Graph'}
@@ -120,6 +121,10 @@ if __name__ == '__main__':
     parser.add_argument("--pretrain", type=str, default=None)
     parser.add_argument("--save-path", type=str, default="./",
                         help="result save path (default: '.')")
+    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--dr", type=float, default=0.0)
+    parser.add_argument("--wd", type=float, default=0.0)
+    
     args = parser.parse_args()
     
     _scenario_loader_path = f'begin.scenarios.{task_level[args.task_type]}'
@@ -145,9 +150,9 @@ if __name__ == '__main__':
     n_layers, n_hidden = model_settings[args.task_type]
     special_param_name, special_param_range = special_params[args.algo]
     
-    lrs = [1e-3, 5e-3, 1e-2]
-    drs = [0.0, 0.25, 0.5]
-    wds = [0.0, 5e-4]
+    lrs = [1e-3]
+    drs = [0.0]
+    wds = [0.0]
     seeds = [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000]
     
     try:
@@ -155,11 +160,6 @@ if __name__ == '__main__':
         os.mkdir(log_path)
     except:
         pass
-    
-    if args.algo == 'TWP':
-        lrs = [1e-3, 5e-3, 1e-2]
-        drs = [0.0, 0.25, 0.5]
-        wds = [0.0, 5e-4]
         
     print(f"The result will be saved at {log_path} directory (See _result.log for the final results)")
     for lr in lrs: # learning rate
@@ -186,6 +186,8 @@ if __name__ == '__main__':
                                                             incr_type=args.incr,
                                                             task_shuffle=1)
 
+                                
+                                start_time = time.perf_counter()
                                 if args.task_type == 'GC':
                                     edge_encoder_fn = None
                                     if args.dataset_name == 'nyctaxi':
@@ -217,7 +219,10 @@ if __name__ == '__main__':
                                                    dropout=dr,
                                                    n_layers=n_layers,
                                                    incr_type=args.incr, num_tasks = num_task)
+                                print('prepare_for_model:', time.perf_counter() - start_time)
 
+                                
+                                start_time = time.perf_counter()
                                 algo_kwargs = copy.deepcopy(special_kwargs[args.algo])
                                 if special_param_name in algo_kwargs:
                                     algo_kwargs[special_param_name] = special_param
@@ -259,10 +264,13 @@ if __name__ == '__main__':
                                                      loss_fn = metric_fn,
                                                      device = torch.device(f'cuda:{args.gpu}'),
                                                      scheduler_fn = lambda x: torch.optim.lr_scheduler.ReduceLROnPlateau(x, mode='max' if args.dataset_name in ['wikics', 'ogbl-collab', 'facebook', 'askubuntu', 'gowalla', 'movielens'] else 'min', patience=patience, min_lr= lr * min_scale * 2., verbose=False),
-                                                     benchmark = True, seed = seed, verbose=True, binary = (metric != 'accuracy'), pretraining=pretrain_fn, **algo_kwargs)
+                                                     benchmark = True, seed = seed, verbose=False, binary = (metric != 'accuracy'), pretraining=pretrain_fn, **algo_kwargs)
+                                print('prepare_for_trainer:', time.perf_counter() - start_time)
 
+                                start_time = time.perf_counter()
                                 benchmark.run(epoch_per_task = max_num_epochs)
-
+                                print('total running time:', time.perf_counter() - start_time)
+                                
                                 shutil.copy(f'{benchmark.result_path}/{benchmark.save_file_name}.pkl', f'{log_path}/result_{lr}_{dr}_{wd}_{str(special_param)}_{seed}.pkl')
                             with open(pickle_path, 'rb') as f:    
                                 result = pickle.load(f)

@@ -1,5 +1,6 @@
 import torch
 import tqdm
+import time
 
 class BaseScenarioLoader:
     r"""Base framework for implementing scenario module.
@@ -30,8 +31,10 @@ class BaseScenarioLoader:
         self.export_mode = False
         
         self._init_continual_scenario()
+        _start_time = time.perf_counter()
         self._update_target_dataset()
         self._update_accumulated_dataset()
+        print('update time:', time.perf_counter() - _start_time)
         
     def _init_continual_scenario(self):
         """ 
@@ -74,11 +77,13 @@ class BaseScenarioLoader:
             Args:
                 preds (torch.Tensor): Predicted output of the models
         """
+        _start_time = time.perf_counter()
         self._curr_task += 1
         if self._curr_task < self.num_tasks:
             self._update_target_dataset()
             self._update_accumulated_dataset()
-            
+        print('update time:', time.perf_counter() - _start_time)
+        
     def get_current_dataset(self):
         """ 
             Returns:

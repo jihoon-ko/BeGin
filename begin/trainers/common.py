@@ -161,6 +161,7 @@ class BaseTrainer:
                 And each trainer for specific problem processes the results and outputs the matrix-shaped results for performances 
                 and the final evaluation metrics, such as AP, AF, INT, and FWT.
         """
+        _start_time = time.perf_counter()
         self.max_num_epochs = epoch_per_task
         # dictionary to store evaluation results
         base_eval_results = {'base': {'val': [], 'test': []}, 'accum': {'val': [], 'test': []}, 'exp': {'val': [], 'test': []}}
@@ -170,8 +171,10 @@ class BaseTrainer:
         training_states = {'exp': copy.deepcopy(initial_training_state), 'base': None, 'accum': None}
         # dictionary to store initial performances
         initial_results = {'val': None, 'test': None}
+        print('run_init:', time.perf_counter() - _start_time)
         
         while True:
+            _start_time = time.perf_counter()
             # load dataset for the current task and the accumulated dataset until the current task
             curr_dataset = self.__scenario.get_current_dataset()
             accumulated_dataset = self.__scenario.get_accumulated_dataset()
@@ -211,7 +214,8 @@ class BaseTrainer:
             dataloaders['accum'] = {k: v for k, v in zip(['train', 'val', 'test'], self.prepareLoader(accumulated_dataset, training_states['accum']))}
             if self.full_mode:
                 self.processBeforeTraining(self.__scenario._curr_task, accumulated_dataset, models['accum'], optims['accum'], training_states['accum']) 
-
+            print('run_before_training:', time.perf_counter() - _start_time)
+            
             # compute initial performance
             if self.curr_task == 0:
                 with torch.no_grad():
@@ -236,6 +240,9 @@ class BaseTrainer:
                         self.__scenario.initial_test_result = initial_results['test']
                     
             # training loop for the current task
+            post_epoch_time = 0.
+            train_epoch_time = 0.
+            overhead_epoch_time = 0.
             for epoch_cnt in range(epoch_per_task):
                 for exp_name in ['exp', 'base', 'accum'] if self.full_mode else ['exp']:
                     if stop_training[exp_name]: continue
@@ -248,7 +255,10 @@ class BaseTrainer:
                         # handle each minibatch
                         self._trainWrapper(models[exp_name], optims[exp_name], curr_batch, training_states[exp_name], train_stats)
                     # reduce the training stats. The default behavior is averaging the values.
+                    _start_time = time.perf_counter()
                     reduced_train_stats = self._reduceTrainingStats(train_stats)
+                    overhead_epoch_time += reduced_train_stats['overhead_time'] + (time.perf_counter() - _start_time)
+                    train_epoch_time += reduced_train_stats['training_time'] + (time.perf_counter() - _start_time)
                     
                     # evaluation phase of the current epoch
                     models[exp_name].eval()
@@ -257,8 +267,12 @@ class BaseTrainer:
                         # handle each minibatch
                         val_predictions.append(self._evalWrapper(models[exp_name], curr_batch, val_stats))
                     # reduce the validation stats. The default behavior is averaging the values.
+                    _start_time = time.perf_counter()
                     reduced_val_stats = self._reduceEvalStats(val_stats)
+                    overhead_epoch_time += reduced_val_stats['overhead_time'] + (time.perf_counter() - _start_time)
+                    train_epoch_time += reduced_val_stats['training_time'] + (time.perf_counter() - _start_time)
                     
+                    _start_time = time.perf_counter()
                     # compute the current performance on validation set
                     if exp_name == 'accum':
                         val_metric_result = self.__scenario.get_accum_eval_result(torch.cat(val_predictions, dim=0), target_split='val')[-1].item()
@@ -274,12 +288,20 @@ class BaseTrainer:
                     # handle procedure for after each itearation and determine whether to continue training or not
                     if not self.processAfterEachIteration(models[exp_name], optims[exp_name], training_states[exp_name], curr_iter_results):
                         stop_training[exp_name] = True
+                    post_epoch_time += time.perf_counter() - _start_time
+
+            print('train_epoch_time:', train_epoch_time)
+            print('post_epoch_time:', post_epoch_time)
+            print('overhead_epoch_time:', overhead_epoch_time)
             
+            _start_time = time.perf_counter()
             # handle procedure for right after the training ends
             for exp_name in ['base', 'accum', 'exp'] if self.full_mode else ['exp']:
                 models[exp_name].eval()
                 self.processAfterTraining(self.__scenario._curr_task, curr_dataset, models[exp_name], optims[exp_name], training_states[exp_name])
-                    
+            print('run_after_training:', time.perf_counter() - _start_time)
+            
+            _start_time = time.perf_counter()
             # measure the performance on (accumulated) validation/test dataset
             for split in ['val', 'test']:
                 for exp_name in ['base', 'accum', 'exp'] if self.full_mode else ['exp']:
@@ -298,7 +320,8 @@ class BaseTrainer:
                     else:
                         # test dataset is already accumulated
                         base_eval_results[exp_name][split].append(self.__scenario.get_eval_result(test_predictions, target_split=split))
-        
+            print('run_eval:', time.perf_counter() - _start_time)
+            
         # return the final evaluation results
         if self.full_mode:
             return {'init_val': initial_results['val'],
@@ -462,13 +485,19 @@ class BaseTrainer:
                 curr_training_states (dict): the dictionary containing the current training states.
                 curr_stats (dict): the dictionary to store the returned dictionaries.
         """
+        _start_time = time.perf_counter()
         new_stats = self.processTrainIteration(model, optimizer, curr_batch, curr_training_states)
+        new_stats['training_time'] = time.perf_counter() - _start_time
+        _start_time = time.perf_counter()
         if new_stats is not None:
             for k, v in new_stats.items():
                 if k not in curr_stats:
                     curr_stats[k] = []
                 curr_stats[k].append(v)
-                
+        if 'overhead_time' not in curr_stats:
+            curr_stats['overhead_time'] = []
+        curr_stats['overhead_time'].append(time.perf_counter() - _start_time)
+        
     def _reduceTrainingStats(self, curr_stats):
         """
             The helper function to reduce the returned stats during training.
@@ -481,11 +510,13 @@ class BaseTrainer:
                 A reduced dictionary containing the final training outcomes.
         """
         if '_num_items' not in curr_stats:
-            reduced_stats = {k: sum(v) / len(v) for k, v in curr_stats.items()}
+            reduced_stats = {k: sum(v) / len(v) for k, v in curr_stats.items() if k not in ['training_time', 'overhead_time']}
         else:
             weights = np.array(curr_stats.pop('_num_items'))
             total = weights.sum()
-            reduced_stats = {k: (np.array(v) * weights).sum() / total for k, v in curr_stats.items()}
+            reduced_stats = {k: (np.array(v) * weights).sum() / total for k, v in curr_stats.items() if k not in ['training_time', 'overhead_time']}
+        reduced_stats['training_time'] = sum(curr_stats['training_time'])
+        reduced_stats['overhead_time'] = sum(curr_stats['overhead_time'])
         return reduced_stats
     
     def processEvalIteration(self, model, curr_batch):
@@ -512,12 +543,19 @@ class BaseTrainer:
                 curr_batch (object): the data (or minibatch) for the current iteration.
                 curr_stats (dict): the dictionary to store the returned dictionaries.
         """
+        _start_time = time.perf_counter()
         preds, new_stats = self.processEvalIteration(model, curr_batch)
+        new_stats['training_time'] = time.perf_counter() - _start_time
+        _start_time = time.perf_counter()
         if new_stats is not None:
             for k, v in new_stats.items():
                 if k not in curr_stats:
                     curr_stats[k] = []
                 curr_stats[k].append(v)
+        if 'overhead_time' not in curr_stats:
+            curr_stats['overhead_time'] = []
+        curr_stats['overhead_time'].append(time.perf_counter() - _start_time)
+        
         return preds
     
     def _reduceEvalStats(self, curr_stats):
@@ -532,11 +570,13 @@ class BaseTrainer:
                 A reduced dictionary containing the final evaluation outcomes.
         """
         if '_num_items' not in curr_stats:
-            reduced_stats = {k: sum(v) / len(v) for k, v in curr_stats.items()}
+            reduced_stats = {k: sum(v) / len(v) for k, v in curr_stats.items() if k not in ['training_time', 'overhead_time']}
         else:
             weights = np.array(curr_stats.pop('_num_items'))
             total = weights.sum()
-            reduced_stats = {k: (np.array(v) * weights).sum() / total for k, v in curr_stats.items()}
+            reduced_stats = {k: (np.array(v) * weights).sum() / total for k, v in curr_stats.items() if k not in ['training_time', 'overhead_time']}
+        reduced_stats['training_time'] = sum(curr_stats['training_time'])
+        reduced_stats['overhead_time'] = sum(curr_stats['overhead_time'])
         return reduced_stats
     
     def processTrainingLogs(self, task_id, epoch_cnt, val_metric_result, train_stats, val_stats):
